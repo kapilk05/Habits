@@ -236,9 +236,10 @@ function Dashboard() {
                         style={{ width: '60px' }}
                       />
                     ) : (
-                      h.goal
+                      h.goal !== undefined && h.goal !== null ? h.goal.toString() : 'N/A'
                     )}
                   </td>
+
                   <td>{h.current_streak}</td>
                   <td>
                     <input type="checkbox" onChange={() => completeHabit(h.habit_id)} />

@@ -120,15 +120,14 @@ def get_habits():
         consistency = round((len(completed_dates) / total_days) * 100, 2) if total_days > 0 else 0
 
         results.append({
-            'habit_id': habit.id,
-            'name': habit.name,
-            'goal_days': habit.goal,
-            'created_at': habit.created_at.isoformat(),
-            'completed_days': len(completed_dates),
-            'current_streak': streak,
-            'consistency_percent': consistency
-        })
-
+                'habit_id': habit.id,
+                'name': habit.name,
+                'goal': habit.goal, 
+                'created_at': habit.created_at.isoformat(),
+                'completed_days': len(completed_dates),
+                'current_streak': streak,
+                'consistency_percent': consistency
+            })
     return jsonify(results), 200
 
 
