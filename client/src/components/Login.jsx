@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import styled from "styled-components";
 
 function Login() {
   const [username, setUsername] = useState("");
@@ -10,41 +11,96 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.get(`http://127.0.0.1:5000/habits?user_id=${username}`);
+      const response = await axios.post("http://127.0.0.1:5000/login", {
+        username,
+        password,
+      });
+
       if (response.status === 200) {
-        localStorage.setItem("user_id", username);
+        localStorage.setItem("user_id", response.data.user_id);
         navigate("/dashboard");
       }
     } catch (err) {
-      console.error("Login failed:", err);
-      alert("Invalid username or password.");
+      console.error("Login failed:", err.response?.data);
+      alert(err.response?.data?.error || "Invalid username or password.");
     }
   };
 
   return (
-    <div className="flex items-center justify-center h-screen">
-      <form onSubmit={handleSubmit} className="p-6 bg-white rounded shadow">
-        <h2 className="text-lg font-bold mb-4">Login</h2>
-        <input
+    <PageWrapper>
+      <FormWrapper onSubmit={handleSubmit}>
+        <Title>Login</Title>
+        <Input
           type="text"
           placeholder="Username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          className="w-full p-2 border rounded mb-4"
+          required
+          autoFocus
         />
-        <input
+        <Input
           type="password"
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full p-2 border rounded mb-4"
+          required
         />
-        <button type="submit" className="w-full bg-blue-500 text-white p-2 rounded">
-          Login
-        </button>
-      </form>
-    </div>
+        <SubmitButton type="submit">Login</SubmitButton>
+      </FormWrapper>
+    </PageWrapper>
   );
 }
 
 export default Login;
+
+const PageWrapper = styled.div`
+  height: 100vh;
+  background-color: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: Arial, sans-serif;
+`;
+
+const FormWrapper = styled.form`
+  background-color: #f7f3ff;
+  padding: 30px 25px;
+  border-radius: 10px;
+  box-shadow: 0 0 10px #b3a7e6;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+`;
+
+const Title = styled.h2`
+  margin-bottom: 20px;
+  color: #6b5b9a;
+  text-align: center;
+`;
+
+const Input = styled.input`
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  border: 1.5px solid #b3a7e6;
+  border-radius: 6px;
+  font-size: 1rem;
+  &:focus {
+    outline-color: #6b5b9a;
+    border-color: #6b5b9a;
+  }
+`;
+
+const SubmitButton = styled.button`
+  padding: 12px 0;
+  background-color: #6b5b9a;
+  color: white;
+  font-weight: 600;
+  font-size: 1rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  &:hover {
+    background-color: #574a7d;
+  }
+`;

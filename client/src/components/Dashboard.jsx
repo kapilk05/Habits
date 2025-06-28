@@ -4,7 +4,6 @@ import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 
 function Dashboard() {
-  const userId = localStorage.getItem('user_id');
   const navigate = useNavigate();
 
   const [habits, setHabits] = useState([]);
@@ -19,32 +18,55 @@ function Dashboard() {
   const [editingId, setEditingId] = useState(null);
   const [editedGoal, setEditedGoal] = useState('');
 
+  const userId = localStorage.getItem('user_id');
+
+  useEffect(() => {
+    if (!userId) {
+      navigate('/');
+      return;
+    }
+    loadHabits();
+    loadMissed();
+    loadHistory();
+  }, [userId, navigate]);
+
   const handleLogout = () => {
     localStorage.removeItem('user_id');
     navigate('/');
   };
 
   const loadHabits = async () => {
-    const res = await axios.get(`http://127.0.0.1:5000/habits?user_id=${userId}`);
-    setHabits(res.data);
+    try {
+      const res = await axios.get(`http://127.0.0.1:5000/habits?user_id=${userId}`);
+      setHabits(res.data);
 
-    if (res.data.length > 0) {
-      const sorted = [...res.data].sort((a, b) => b.consistency_percent - a.consistency_percent);
-      setBestHabit(sorted[0]);
-      setWorstHabit(sorted[sorted.length - 1]);
+      if (res.data.length > 0) {
+        const sorted = [...res.data].sort((a, b) => b.consistency_percent - a.consistency_percent);
+        setBestHabit(sorted[0]);
+        setWorstHabit(sorted[sorted.length - 1]);
+      }
+    } catch {
+      setMsg('Could not load your habits. Please try again later.');
     }
   };
 
   const createHabit = async (e) => {
     e.preventDefault();
+    if (!userId) {
+      setMsg('You need to be logged in to add habits.');
+      return;
+    }
+    if (!habitName || !goalDays) {
+      setMsg('Please complete all the fields.');
+      return;
+    }
     try {
       await axios.post('http://127.0.0.1:5000/habits', {
         name: habitName,
         goal: Number(goalDays),
-        category,
         user_id: Number(userId),
       });
-      setMsg('Habit created!');
+      setMsg('New habit added successfully!');
       setHabitName('');
       setGoalDays('');
       setCategory('daily');
@@ -52,7 +74,7 @@ function Dashboard() {
       loadMissed();
       loadHistory();
     } catch (err) {
-      setMsg(err.response?.data?.error || 'Error creating habit');
+      setMsg(err.response?.data?.error || 'Error occurred while adding habit.');
     }
   };
 
@@ -62,29 +84,33 @@ function Dashboard() {
       loadHabits();
       loadMissed();
       loadHistory();
-    } catch (err) {
-      alert('Already marked complete today!');
+    } catch {
+      alert('You have already marked this habit complete today.');
     }
   };
 
   const deleteHabit = async (habitId) => {
     try {
       await axios.delete(`http://127.0.0.1:5000/habits/${habitId}`);
-      setMsg('Habit deleted!');
+      setMsg('Habit removed.');
       loadHabits();
       loadMissed();
       loadHistory();
-    } catch (err) {
-      setMsg('Failed to delete habit');
+    } catch {
+      setMsg('Failed to delete the habit. Please try again.');
     }
   };
 
   const startEditing = (habitId, currentGoal) => {
     setEditingId(habitId);
-    setEditedGoal(currentGoal);
+    setEditedGoal(currentGoal.toString());
   };
 
   const saveGoal = async (habitId) => {
+    if (!editedGoal || isNaN(Number(editedGoal))) {
+      alert('Please enter a valid number for the goal.');
+      return;
+    }
     try {
       await axios.put(`http://127.0.0.1:5000/habits/${habitId}`, {
         goal: Number(editedGoal),
@@ -92,52 +118,68 @@ function Dashboard() {
       setEditingId(null);
       setEditedGoal('');
       loadHabits();
-    } catch (err) {
-      alert('Failed to update goal');
+    } catch {
+      alert('Failed to update the goal. Please try again.');
     }
   };
 
   const loadMissed = async () => {
-    const [today, previous] = await Promise.all([
-      axios.get(`http://127.0.0.1:5000/habits/missed/today?user_id=${userId}`),
-      axios.get(`http://127.0.0.1:5000/habits/missed/previous?user_id=${userId}`),
-    ]);
-    setMissed([...today.data, ...previous.data]);
+    try {
+      const [today, previous] = await Promise.all([
+        axios.get(`http://127.0.0.1:5000/habits/missed/today?user_id=${userId}`),
+        axios.get(`http://127.0.0.1:5000/habits/missed/previous?user_id=${userId}`),
+      ]);
+      setMissed([...today.data, ...previous.data]);
+    } catch {
+      setMsg('Unable to load missed habits.');
+    }
   };
 
   const loadHistory = async () => {
-    const res = await axios.get(`http://127.0.0.1:5000/habits?user_id=${userId}`);
-    const habitMap = {};
-    res.data.forEach((h) => (habitMap[h.habit_id] = h.name));
+    try {
+      const res = await axios.get(`http://127.0.0.1:5000/habits?user_id=${userId}`);
+      const validHabits = res.data.filter((h) => h.created_at);
+      if (validHabits.length === 0) return;
 
-    const start = res.data.reduce((min, h) => (h.created_at < min ? h.created_at : min), res.data[0].created_at);
-    const end = new Date().toISOString().split('T')[0];
+      const habitMap = {};
+      validHabits.forEach((h) => {
+        habitMap[h.habit_id] = h.name;
+      });
 
-    const historyRes = await axios.get(
-      `http://127.0.0.1:5000/habits/history?user_id=${userId}&start=${start}&end=${end}`
-    );
+      const start = validHabits.reduce(
+        (min, h) => (h.created_at < min ? h.created_at : min),
+        validHabits[0].created_at
+      );
+      const end = new Date().toISOString().split('T')[0];
 
-    const fullData = historyRes.data.map((h) => ({
-      ...h,
-      name: habitMap[h.habit_id] || `Habit #${h.habit_id}`,
-    }));
-    setHistory(fullData);
+      const historyRes = await axios.get(
+        `http://127.0.0.1:5000/habits/history?user_id=${userId}&start=${start}&end=${end}`
+      );
+
+      const fullData = historyRes.data.map((h) => ({
+        ...h,
+        name: habitMap[h.habit_id] || `Habit #${h.habit_id}`,
+      }));
+      setHistory(fullData);
+    } catch {
+      setMsg('Could not load your completion history.');
+    }
   };
 
-  useEffect(() => {
-    loadHabits();
-    loadMissed();
-    loadHistory();
-  }, []);
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  };
 
   return (
     <Wrapper>
       <TopBar>
-        <LogoutButton onClick={handleLogout}>Logout</LogoutButton>
+        <LogoutButton onClick={handleLogout}>Log Out</LogoutButton>
       </TopBar>
 
       <AddHabitSection>
-        <h2>Create New Habit</h2>
+        <h2>Add a New Habit</h2>
         <form onSubmit={createHabit}>
           <input
             placeholder="Habit Name"
@@ -149,6 +191,7 @@ function Dashboard() {
             placeholder="Goal Days"
             value={goalDays}
             type="number"
+            min={1}
             onChange={(e) => setGoalDays(e.target.value)}
             required
           />
@@ -164,7 +207,7 @@ function Dashboard() {
 
       <Columns>
         <LeftColumn>
-          <h3>Current Habits</h3>
+          <h3>Your Current Habits</h3>
           <table>
             <thead>
               <tr>
@@ -172,27 +215,28 @@ function Dashboard() {
                 <th>Created</th>
                 <th>Goal</th>
                 <th>Streak</th>
-                <th>Mark as Complete</th>
+                <th>Mark Complete</th>
                 <th>Delete</th>
-                <th>Edit</th>
-                <th>Set Reminder</th>
+                <th>Edit Goal</th>
+                <th>Reminder</th>
               </tr>
             </thead>
             <tbody>
               {habits.map((h) => (
                 <tr key={h.habit_id}>
                   <td>{h.name}</td>
-                  <td>{h.created_at}</td>
+                  <td>{formatDate(h.created_at)}</td>
                   <td>
                     {editingId === h.habit_id ? (
                       <input
                         type="number"
+                        min={1}
                         value={editedGoal}
                         onChange={(e) => setEditedGoal(e.target.value)}
                         style={{ width: '60px' }}
                       />
                     ) : (
-                      h.goal_days
+                      h.goal
                     )}
                   </td>
                   <td>{h.current_streak}</td>
@@ -206,11 +250,11 @@ function Dashboard() {
                     {editingId === h.habit_id ? (
                       <button onClick={() => saveGoal(h.habit_id)}>Save</button>
                     ) : (
-                      <button onClick={() => startEditing(h.habit_id, h.goal_days)}>✏️</button>
+                      <button onClick={() => startEditing(h.habit_id, h.goal)}>✏️</button>
                     )}
                   </td>
                   <td>
-                    <button onClick={() => alert('Reminder sent (mock)!')}>Remind</button>
+                    <button onClick={() => alert('Reminder sent!')}>Remind</button>
                   </td>
                 </tr>
               ))}
@@ -219,15 +263,19 @@ function Dashboard() {
 
           {bestHabit && (
             <PerformanceSection>
-              <h4>🏆 Best Performing Habit</h4>
-              <p>{bestHabit.name} — {bestHabit.consistency_percent}% consistency</p>
+              <h4>🏆 Best Habit</h4>
+              <p>
+                {bestHabit.name} — {bestHabit.consistency_percent}% consistency
+              </p>
             </PerformanceSection>
           )}
 
           {worstHabit && (
             <PerformanceSection>
-              <h4>💤 Worst Performing Habit</h4>
-              <p>{worstHabit.name} — {worstHabit.consistency_percent}% consistency</p>
+              <h4>💤 Needs Improvement</h4>
+              <p>
+                {worstHabit.name} — {worstHabit.consistency_percent}% consistency
+              </p>
             </PerformanceSection>
           )}
         </LeftColumn>
@@ -236,7 +284,7 @@ function Dashboard() {
           <h3>Missed Habits</h3>
           {missed.map((m, i) => (
             <p key={i}>
-              {m.name} {m.missed_date ? `(on ${m.missed_date})` : ''} ❌
+              {m.name} {m.missed_date ? `(on ${formatDate(m.missed_date)})` : ''} ❌
             </p>
           ))}
         </CenterColumn>
@@ -246,7 +294,7 @@ function Dashboard() {
           <ul>
             {history.map((h, i) => (
               <li key={i}>
-                {h.name} completed on {h.date}
+                {h.name} completed on {formatDate(h.date)}
               </li>
             ))}
           </ul>
@@ -258,7 +306,6 @@ function Dashboard() {
 
 export default Dashboard;
 
-// Styled Components
 const Wrapper = styled.div`
   padding: 20px;
   background: ${({ theme }) => theme.background};
@@ -295,7 +342,8 @@ const AddHabitSection = styled.div`
     margin-top: 10px;
   }
 
-  input, button {
+  input,
+  button {
     padding: 10px;
     border-radius: 8px;
     border: none;
@@ -329,7 +377,8 @@ const LeftColumn = styled.div`
     color: ${({ theme }) => theme.color};
   }
 
-  th, td {
+  th,
+  td {
     border: 1px solid ${({ theme }) => (theme.isDark ? '#555' : '#ccc')};
     padding: 8px;
     text-align: center;
