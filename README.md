@@ -49,6 +49,11 @@ Werkzeug
 ---
 ## Working Project 
 
+![1](Readme%20Images/Habit%20tracker%201.png)
+
+
+![2](Readme%20Images/Habit%20tracker%202.png)
+
 
 ## 📬 Sample API Requests
 
